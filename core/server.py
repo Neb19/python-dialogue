@@ -1,142 +1,173 @@
-#!/usr/bin/python3 -d
 
 import logging
-import socket
 import threading
+import socket
+import time
+from .session import SessionTCPHandler
 
-"""
-This class provides the necessary to manage a tcp or udp server.
-Each instance is a server configuration with usual attributes like :
-    * port to use
-    * hostname (localhost, 192.168.1.10, etc)
-    * protocol (udp, tcp)
-When your server class object is initialized, you can start, stop, restart the server.
-
-A new system thread is created each time you want to start a server configuration,
-and each time a new connection is incoming.
-"""
 class Server:
+    """
+    This class provides an interface to run a server socket
+    and interact with it.
+    An initialized object represents a server configuration.
+    the start() method run the server in a new thread and
+    for each incoming connection a new thread is created.
+    """
 
     # format logging text
     logging.basicConfig(format="[%(asctime)s] %(message)s", level=logging.INFO, datefmt="%H:%M:%S")
 
-    # contains all thread executed by each server/object instances
-    active_server_threads = []
+    def __init__(self, hostname:str='127.0.0.1', protocol:str='tcp', port:int=8888, max_conn:int=5) -> None:
+        self._hostname   = hostname
+        self._protocol   = protocol.lower()
+        self._port       = port
+        self._maxconn    = max_conn
+        self._threadID   = None
+        self._socket     = None
+        self._socketType = socket.SOCK_DGRAM if self._protocol == "udp" else socket.SOCK_STREAM
+        self._sessions   = []
 
-    # used to close a child thread, class attribute
-    stop_thread = None
+
+    @property
+    def hostname(self) -> str:
+        return self._hostname
+
+    @property
+    def protocol(self) -> str:
+        return self._protocol
+
+    @property
+    def port(self) -> int:
+        return self._port
+
+    @property
+    def maxconn(self) -> int:
+        return self._maxconn
+
 
     """
-    Server Initialization
-        Parameters:
-            hostname  (string)  : interface to listen
-            protocol  (string)  : protocol to use
-            port      (integer) : port to use
-            thread_id (integer) : contain the thread_id when .start() method is called
+    Start the server in new thread
     """
-    def __init__(self, hostname, protocol, port):
-        self.hostname = hostname
-        self.protocol = protocol.lower()
-        self.port  = int(port)
-        self.thread_id = None
-        self.clients = []
-
-
-    # Start the server in a different thread
-    def start(self):
-        thread = threading.Thread(target=Server.__listen, args=(self,))
-        thread.start()
-
-
-    # Stop the server
-    def stop(self):
-        logging.info('stopping the server...')
-        self.__close()
-
-
-    # Restart the server
-    def restart(self):
-        self.stop()
-        self.start()
-
-
-    # Handle connection interraction with the client
-    def handle_connectionTCP(self, client):
-        with client:
-            client.send("Welcome!\n".encode('utf-8'))
-            client.send("are you ok ?\n".encode('utf-8'))
-            while True:
-                data = client.recv(1024)
-                data = data.decode('utf-8').rstrip()
-                if not data:
-                    break
-
-                logging.info('receive message from client: ' + data)
-                if data == "yes":
-                    client.send("great!\n".encode('utf-8'))
-
-                elif data == "no":
-                    client.send("sad:(\n".encode('utf-8'))
-                else:
-                    pass
-
-
-    def handle_connectionUDP(self, client):
-        print(client)
-
-
-
-    # This method creates the socket, binds the hostname, and loops on incoming socket connections
-    def __listen(self):
-        logging.info('starting {}:{}/{}'.format(self.hostname, self.port, self.protocol))
-
-        # set the thread id to the object, as a running server thread. This is useful to close the thread later
-        self.thread_id = threading.get_ident()
-        # append the thread id to the class attribute in order to list all running threads later
-        Server.active_server_threads.append(self.thread_id)
-
-        # define the socket type to use
-        if self.protocol == "tcp":
-            socket_proto = socket.SOCK_STREAM
-        elif self.protocol == "udp":
-            socket_proto = socket.SOCK_DGRAM
-
-        # create the socket, bind it to the hostname, and loop on incoming connections
+    def start(self) -> bool:
+        logging.info('starting server: {} on port {}/{}'.format(self._hostname, self._port, self._protocol))
+        self._socket = socket.socket(socket.AF_INET, self._socketType)
         try:
-            server_socket = socket.socket(socket.AF_INET, socket_proto)
-            server_socket.bind((self.hostname, self.port))
-            if self.protocol == "tcp":
-                server_socket.listen(3)
+            self._socket.bind((self._hostname, self._port))
+            if self._protocol == 'tcp':
+                self._socket.listen(self._maxconn)
         except:
-            logging.error('cannot init server')
+            logging.error('Cannot bind address on {}:{}/{}'.format(self._hostname, self._port, self._protocol))
+            return False
+
+        if self.__createThread(self.__listenLoop):
+            logging.info('server is running ({}:{}/{})'.format(self._hostname, self._port, self._protocol))
         else:
-            logging.info('server: started')
+            logging.error('Cannot start the server')
+            return False
 
-        # the "listenning loop" to catch each incoming connections into a new thread
-        # if the thread_id attribute is not defined, then break the loop
-        while hasattr(self, "thread_id"):
-            # accept incoming tcp connections
-            if self.protocol == "tcp":
-                (client, address) = server_socket.accept()
-                t = threading.Thread(target=Server.handle_connectionTCP, args=(self, client))
-            elif self.protocol == "udp":
-                (client, address) = server_socket.recvfrom(1024)
-                t = threading.Thread(target=Server.handle_connectionUDP, args=(self, client))
-
-            # log new connection and handle it in new thread
-            logging.info('new connection from : {}'.format(str(address)))
-            t.start()
-
-        # out of the listenning loop, so server is stopped
-        logging.info("server: stopped")
+        return True
 
 
-    # close the thread by unsetting the thread_id object attribute - watched by the listenning loop
-    # we must create a new connection to the socket after deleting the attribute in order to..
-    # .. trigger the next loop sequence and break it
-    def __close(self):
-        Server.active_server_threads.remove(self.thread_id)
-        del self.thread_id
-        close_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        close_conn.connect((self.hostname, self.port))
+    """
+    Stop the server
+    """
+    def stop(self) -> bool:
+        logging.info('stopping server ...')
+        try:
+            del self._threadID
+            close_conn = socket.socket(socket.AF_INET, self._socketType)
+            close_conn.connect((self._hostname, self._port))
+        except:
+            logging.error('server is not running.')
+            return False
 
+        return True
+
+
+    """
+    Restart the server
+    """
+    def restart(self) -> bool:
+        if not self.stop():
+            return False
+
+        time.sleep(1)
+
+        if not self.start():
+            return False
+
+        return True
+
+
+    """
+    Loop on incoming connections
+    Create a new thread for new connections
+    """
+    def __listenLoop(self) -> bool:
+        self._threadID = threading.get_ident()
+        while hasattr(self, "_threadID"):
+            try:
+                (conn, addr) = self._socket.accept()
+            except:
+                return False
+
+            session = SessionTCPHandler(conn, addr)
+            self._sessions.append(session)
+            session.start()
+#            self.__createThread(self.handleConnectionTCP, (conn,))
+
+        self._socket.close()
+        logging.info('socket closed')
+        return True
+
+
+    """
+    Method called to handle TCP Connection
+    """
+    def handleConnectionTCP(self, conn) -> None:
+
+        def loop(conn):
+            while True:
+                conn_input = conn.recv(1024)
+                if not conn_input:
+                    break
+        return loop
+
+
+    """
+    Method called to handle UDP Connection
+    """
+    def handleConnectionUDP(self, conn):
+        return conn
+
+
+    """
+    Create new Thread for the target function
+    """
+    def __createThread(self, func, parameters=(None), wait=False) -> bool:
+        if parameters == None:
+            thread = threading.Thread(target=func)
+        else:
+            thread = threading.Thread(target=func, args=parameters)
+
+        try:
+            thread.start()
+        except:
+            return False
+
+        if wait == True:
+            thread.join()
+
+        return True
+
+
+
+if __name__ == "__main__":
+    server1 = Server(hostname='localhost', port=2223, max_conn=10, protocol='tcp')
+    server1.start()
+
+    #server2 = Server(hostname='localhost', port=2224, max_conn=5, protocol='tcp')
+    #server2.start()
+    #time.sleep(3)
+    #server1.restart()
+    #server1.stop()
