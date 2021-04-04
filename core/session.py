@@ -15,23 +15,31 @@ class SessionTCPHandler(threading.Thread):
         self.conn = conn
         self.addr = addr
 
+
+    """
+    Override run() from Thread class.
+    Called when <object>.start() is called to run/start the thread.
+    """
     def run(self):
         SessionTCPHandler.sessions.append(self)
         SessionTCPHandler.total_sessions += 1
         logging.info("active sessions : {}".format(SessionTCPHandler.total_sessions))
-        self.send("Bienvenue !\n")
+        self.send("-------------------------------------------")
+        self.send("\nWelcome to Dialoguer, a simple Python Chat!")
         self._loop()
 
+
     def send(self, data:str) ->bool:
-        #try:
-        self.conn.send(data.encode('utf-8'))
-        #except:
-            #return False
+        try:
+            self.conn.send(data.encode('utf-8'))
+        except:
+            return False
 
         return True
 
+
     def send_to_all(self, data:str):
-        print("test")
+        logging.info('data received')
         if SessionTCPHandler.total_sessions > 1:
             targetSessions = SessionTCPHandler.sessions
             targetSessions.remove(self)
@@ -40,8 +48,10 @@ class SessionTCPHandler(threading.Thread):
 
             targetSessions.append(self)
 
+
     def receive(self) -> str:
         return self.conn.recv(1024)
+
 
     def _loop(self):
         while True:
@@ -52,4 +62,5 @@ class SessionTCPHandler(threading.Thread):
 
         SessionTCPHandler.sessions.remove(self)
         SessionTCPHandler.total_sessions -= 1
-        print('disconnected')
+        logging.info('user disconnected')
+        logging.info('active session : {}'.format(SessionTCPHandler.total_sessions))

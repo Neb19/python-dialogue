@@ -13,6 +13,7 @@ class Client:
         self.port     = port
         self._socket   = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+
     """
     Connect to the server, execute 2 thread to receive and send data
     """

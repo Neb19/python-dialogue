@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
 import argparse
-import socket
 from core.server import Server
 from core.client import Client
 
