@@ -1,6 +1,7 @@
 
 import threading
 import logging
+import time
 
 class SessionTCPHandler(threading.Thread):
 
@@ -25,32 +26,35 @@ class SessionTCPHandler(threading.Thread):
         SessionTCPHandler.total_sessions += 1
         logging.info("active sessions : {}".format(SessionTCPHandler.total_sessions))
         self.send("-------------------------------------------")
-        self.send("\nWelcome to Dialoguer, a simple Python Chat!")
+        time.sleep(0.1)
+        self.send("Welcome to Dialoguer!")
+        time.sleep(0.5)
+        self.send("Enter your name:")
+        time.sleep(0.1)
+        self.username = self.receive()
+        self.send("Hello {} !".format(self.username.decode('utf-8')))
         self._loop()
 
 
     def send(self, data:str) ->bool:
-        try:
-            self.conn.send(data.encode('utf-8'))
-        except:
-            return False
-
+        self.conn.send(data.encode('utf-8'))
         return True
 
 
     def send_to_all(self, data:str):
         logging.info('data received')
-        if SessionTCPHandler.total_sessions > 1:
-            targetSessions = SessionTCPHandler.sessions
-            targetSessions.remove(self)
-            for session in targetSessions:
-                session.send(data.decode('utf-8'))
-
-            targetSessions.append(self)
+        for session in SessionTCPHandler.sessions:
+            session.send(self.username.decode('utf-8') + ": " + data.decode('utf-8'))
 
 
     def receive(self) -> str:
-        return self.conn.recv(1024)
+        try:
+            return self.conn.recv(1024)
+        except ConnectionResetError:
+            logging.info("connection closed by peer {}".format(self.addr))
+            SessionTCPHandler.sessions.remove(self)
+            SessionTCPHandler.total_sessions -= 1
+            logging.info('active session : {}'.format(SessionTCPHandler.total_sessions))
 
 
     def _loop(self):
@@ -64,3 +68,4 @@ class SessionTCPHandler(threading.Thread):
         SessionTCPHandler.total_sessions -= 1
         logging.info('user disconnected')
         logging.info('active session : {}'.format(SessionTCPHandler.total_sessions))
+

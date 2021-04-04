@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import argparse
+import curses
 from core.server import Server
 from core.client import Client
 
@@ -31,6 +32,8 @@ if __name__ == "__main__":
         server.start()
 
     else:
+        screen = curses.initscr()
+
         client = Client(args.hostname, protocol, args.port)
         client.connect()
 
