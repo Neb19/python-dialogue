@@ -14,6 +14,7 @@ class Server:
     for each incoming connection a new thread is created.
     """
 
+
     # format logging text
     logging.basicConfig(format="[%(asctime)s] %(message)s", level=logging.INFO, datefmt="%H:%M:%S")
 
@@ -114,31 +115,10 @@ class Server:
             session = SessionTCPHandler(conn, addr)
             self._sessions.append(session)
             session.start()
-#            self.__createThread(self.handleConnectionTCP, (conn,))
 
         self._socket.close()
         logging.info('socket closed')
         return True
-
-
-    """
-    Method called to handle TCP Connection
-    """
-    def handleConnectionTCP(self, conn) -> None:
-
-        def loop(conn):
-            while True:
-                conn_input = conn.recv(1024)
-                if not conn_input:
-                    break
-        return loop
-
-
-    """
-    Method called to handle UDP Connection
-    """
-    def handleConnectionUDP(self, conn):
-        return conn
 
 
     """
@@ -161,13 +141,3 @@ class Server:
         return True
 
 
-
-if __name__ == "__main__":
-    server1 = Server(hostname='localhost', port=2223, max_conn=10, protocol='tcp')
-    server1.start()
-
-    #server2 = Server(hostname='localhost', port=2224, max_conn=5, protocol='tcp')
-    #server2.start()
-    #time.sleep(3)
-    #server1.restart()
-    #server1.stop()

@@ -25,28 +25,43 @@ class SessionTCPHandler(threading.Thread):
         SessionTCPHandler.sessions.append(self)
         SessionTCPHandler.total_sessions += 1
         logging.info("active sessions : {}".format(SessionTCPHandler.total_sessions))
+        self.welcome()
+
+    def welcome(self):
         self.send("-------------------------------------------")
         time.sleep(0.1)
         self.send("Welcome to Dialoguer!")
-        time.sleep(0.5)
-        self.send("Enter your name:")
+        time.sleep(0.1)
+        self.send("What's your name ?")
         time.sleep(0.1)
         self.username = self.receive()
-        self.send("Hello {} !".format(self.username.decode('utf-8')))
+
+        for user in SessionTCPHandler.sessions:
+            user.send("[{}] is now connected.".format(self.username.decode('utf-8')))
+
         self._loop()
 
 
+    """
+    Send data to the client
+    """
     def send(self, data:str) ->bool:
         self.conn.send(data.encode('utf-8'))
         return True
 
 
+    """
+    Send data to all connected clients
+    """
     def send_to_all(self, data:str):
         logging.info('data received')
         for session in SessionTCPHandler.sessions:
             session.send(self.username.decode('utf-8') + ": " + data.decode('utf-8'))
 
 
+    """
+    Receive data from client
+    """
     def receive(self) -> str:
         try:
             return self.conn.recv(1024)
@@ -57,6 +72,10 @@ class SessionTCPHandler(threading.Thread):
             logging.info('active session : {}'.format(SessionTCPHandler.total_sessions))
 
 
+    """
+    Loop on client inputs
+    Break the loop when client leaves the connection
+    """
     def _loop(self):
         while True:
             conn_input = self.receive()

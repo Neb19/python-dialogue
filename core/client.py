@@ -2,11 +2,10 @@
 import socket
 import threading
 from .windows import Windows
-from curses import wrapper
 
 class Client:
     """
-    Client class to connect to the server
+    Client class to connect to the server and init Curses Windows
     """
 
     def __init__(self, hostname:str, protocol:int, port:int) -> None:
@@ -18,7 +17,7 @@ class Client:
 
 
     """
-    Connect to the server, execute 2 thread to receive and send data
+    Connect to the server, execute threads to receive and send data
     """
     def connect(self):
         self.window.start_display()
